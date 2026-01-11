@@ -45,6 +45,33 @@ See “How can I contribute to DDEV?” in the [FAQ](https://docs.ddev.com/en/st
 
 Additionally, [https://ddev.com/get-started/](https://ddev.com/get-started/) provides an up-to-date getting-started guide.
 
+## Installation (ddev4m2 - Optimized for Magento/PHP)
+
+### Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chuccv/ddev4m2/main/install_ddev4m2.sh | bash
+```
+
+### Features
+
+- **Skip Auto Pull**: Add `--skip-auto-pull` option to prevent Docker image pull and build
+- **Magento/PHP Only**: Optimized for Magento 2 and PHP projects only (removed Drupal, Symfony, Laravel, WordPress, etc.)
+- **Fast Installation**: Download pre-built binary (no compilation needed)
+
+### Configuration
+
+Enable skip-auto-pull to save disk space:
+
+```bash
+ddev config global --skip-auto-pull=true
+```
+
+This will:
+- Skip automatic Docker image pulls
+- Skip image builds (web, db, ssh-auth, router)
+- Only use existing local images
+
 ## Highlighted Features
 
 * Quickly create local web development environments based on code repositories, with minimal configuration.
