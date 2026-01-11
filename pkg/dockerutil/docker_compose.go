@@ -360,6 +360,24 @@ func PullImages(images []string, pullAlways bool) error {
 		return nil
 	}
 
+	if globalconfig.DdevGlobalConfig.SkipAutoPull {
+		var missingImages []string
+		for _, image := range images {
+			if image == "" {
+				continue
+			}
+			imageExists, _ := ImageExistsLocally(image)
+			if !imageExists {
+				missingImages = append(missingImages, image)
+			}
+		}
+		if len(missingImages) > 0 {
+			util.Warning("SkipAutoPull is enabled. Missing images: %s. Please pull them manually.", strings.Join(missingImages, ", "))
+		}
+		util.Debug("SkipAutoPull is enabled, skipping image pull")
+		return nil
+	}
+
 	composeYamlPull, err := CreateComposeProject("name: compose-yaml-pull")
 	if err != nil {
 		return err

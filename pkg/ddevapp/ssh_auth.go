@@ -62,15 +62,21 @@ func (app *DdevApp) EnsureSSHAgentContainer() error {
 		util.Warning("failed to docker-compose down on %s: %v", composeFile, err)
 	}
 
-	err = dockerutil.Pull(ddevImages.GetSSHAuthImage())
-	if err != nil {
-		return err
+	if !globalconfig.DdevGlobalConfig.SkipAutoPull {
+		err = dockerutil.Pull(ddevImages.GetSSHAuthImage())
+		if err != nil {
+			return err
+		}
 	}
 
 	// Now restart ddev-ssh-agent
+	action := []string{"-p", SSHAuthName, "up", "-d"}
+	if !globalconfig.DdevGlobalConfig.SkipAutoPull {
+		action = append(action, "--build")
+	}
 	_, _, err = dockerutil.ComposeCmd(&dockerutil.ComposeCmdOpts{
 		ComposeFiles: []string{composeFile},
-		Action:       []string{"-p", SSHAuthName, "up", "--build", "-d"},
+		Action:       action,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start ddev-ssh-agent: %v", err)

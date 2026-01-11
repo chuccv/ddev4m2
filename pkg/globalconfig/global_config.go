@@ -77,6 +77,7 @@ type GlobalConfig struct {
 	WebEnvironment           []string                `yaml:"web_environment"`
 	XdebugIDELocation        string                  `yaml:"xdebug_ide_location"`
 	XHProfMode               configTypes.XHProfMode  `yaml:"xhprof_mode,omitempty"`
+	SkipAutoPull             bool                    `yaml:"skip_auto_pull,omitempty"`
 	ProjectList              map[string]*ProjectInfo `yaml:"project_info,omitempty"`
 }
 

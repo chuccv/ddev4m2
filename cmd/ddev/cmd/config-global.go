@@ -212,6 +212,12 @@ func handleGlobalConfig(cmd *cobra.Command, _ []string) {
 		dirty = true
 	}
 
+	if cmd.Flag("skip-auto-pull").Changed {
+		val, _ := cmd.Flags().GetBool("skip-auto-pull")
+		globalconfig.DdevGlobalConfig.SkipAutoPull = val
+		dirty = true
+	}
+
 	if cmd.Flag("wsl2-no-windows-hosts-mgt").Changed {
 		val, _ := cmd.Flags().GetBool("wsl2-no-windows-hosts-mgt")
 		globalconfig.DdevGlobalConfig.WSL2NoWindowsHostsMgt = val
@@ -316,6 +322,8 @@ func init() {
 	_ = configGlobalCommand.RegisterFlagCompletionFunc("simple-formatting", configCompletionFunc([]string{"true", "false"}))
 	configGlobalCommand.Flags().Bool("use-hardened-images", false, "If true, use more secure 'hardened' images for an actual internet deployment")
 	_ = configGlobalCommand.RegisterFlagCompletionFunc("use-hardened-images", configCompletionFunc([]string{"true", "false"}))
+	configGlobalCommand.Flags().Bool("skip-auto-pull", false, "If true, skip automatic Docker image pulls and only use existing local images")
+	_ = configGlobalCommand.RegisterFlagCompletionFunc("skip-auto-pull", configCompletionFunc([]string{"true", "false"}))
 	configGlobalCommand.Flags().Bool("fail-on-hook-fail", false, "If true, 'ddev start' will fail when a hook fails")
 	_ = configGlobalCommand.RegisterFlagCompletionFunc("fail-on-hook-fail", configCompletionFunc([]string{"true", "false"}))
 	configGlobalCommand.Flags().String(configTypes.FlagPerformanceModeName, configTypes.FlagPerformanceModeDefault, configTypes.FlagPerformanceModeDescription(configTypes.ConfigTypeGlobal))

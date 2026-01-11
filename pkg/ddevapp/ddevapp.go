@@ -1738,59 +1738,63 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 		return err
 	}
 
-	// Build extra layers on web and db images if necessary
-	if output.JSONOutput {
-		output.UserOut.Printf("Building project images...")
-	} else {
-		// Using fmt.Print to avoid a newline, as output.UserOut.Printf adds one by default.
-		// See https://github.com/sirupsen/logrus/issues/167
-		// We want the progress dots to appear on the same line.
-		fmt.Print("Building project images...")
-		// Print a newline before util.Debug below
-		if globalconfig.DdevDebug {
-			output.UserOut.Debugln()
+	if !globalconfig.DdevGlobalConfig.SkipAutoPull {
+		// Build extra layers on web and db images if necessary
+		if output.JSONOutput {
+			output.UserOut.Printf("Building project images...")
+		} else {
+			// Using fmt.Print to avoid a newline, as output.UserOut.Printf adds one by default.
+			// See https://github.com/sirupsen/logrus/issues/167
+			// We want the progress dots to appear on the same line.
+			fmt.Print("Building project images...")
+			// Print a newline before util.Debug below
+			if globalconfig.DdevDebug {
+				output.UserOut.Debugln()
+			}
 		}
-	}
-	buildDurationStart := util.ElapsedDuration(time.Now())
-	progress := "plain"
-	action := []string{"--progress=" + progress, "build"}
-	if app.NoCache {
-		action = append(action, "--no-cache")
-	}
-	util.Debug("Executing docker-compose -f %s %s", app.DockerComposeFullRenderedYAMLPath(), strings.Join(action, " "))
-	out, stderr, err := dockerutil.ComposeCmd(&dockerutil.ComposeCmdOpts{
-		ComposeFiles: []string{app.DockerComposeFullRenderedYAMLPath()},
-		Action:       action,
-		Progress:     true,
-		Timeout:      time.Hour * 1,
-	})
-	if err != nil {
-		return fmt.Errorf("docker-compose build failed: %v, output='%s', stderr='%s'", err, out, stderr)
-	}
-	if globalconfig.DdevVerbose {
-		util.Debug("docker-compose build output:\n%s\n\n", out)
-	}
-
-	_, logStderrOutput, err := dockerutil.RunSimpleContainer(ddevImages.GetWebImage()+"-"+app.Name+"-built", "log-stderr-"+app.Name+"-"+util.RandString(6), []string{"sh", "-c", "log-stderr.sh --show 2>/dev/null || true"}, []string{}, []string{}, nil, uid, true, false, map[string]string{"com.ddev.site-name": ""}, nil, nil)
-	// If the web image is dirty, try to rebuild it immediately
-	if err == nil && strings.TrimSpace(logStderrOutput) != "" && globalconfig.IsInternetActive() {
-		util.Debug("Executing docker-compose -f %s --progress=%s build web --no-cache", app.DockerComposeFullRenderedYAMLPath(), progress)
-		out, stderr, err = dockerutil.ComposeCmd(&dockerutil.ComposeCmdOpts{
+		buildDurationStart := util.ElapsedDuration(time.Now())
+		progress := "plain"
+		action := []string{"--progress=" + progress, "build"}
+		if app.NoCache {
+			action = append(action, "--no-cache")
+		}
+		util.Debug("Executing docker-compose -f %s %s", app.DockerComposeFullRenderedYAMLPath(), strings.Join(action, " "))
+		out, stderr, err := dockerutil.ComposeCmd(&dockerutil.ComposeCmdOpts{
 			ComposeFiles: []string{app.DockerComposeFullRenderedYAMLPath()},
-			Action:       []string{"--progress=" + progress, "build", "web", "--no-cache"},
+			Action:       action,
 			Progress:     true,
 			Timeout:      time.Hour * 1,
 		})
 		if err != nil {
-			return fmt.Errorf("docker-compose build web --no-cache failed: %v, output='%s', stderr='%s'", err, out, stderr)
+			return fmt.Errorf("docker-compose build failed: %v, output='%s', stderr='%s'", err, out, stderr)
 		}
 		if globalconfig.DdevVerbose {
-			util.Debug("docker-compose build web --no-cache output:\n%s\n\n", out)
+			util.Debug("docker-compose build output:\n%s\n\n", out)
 		}
-	}
 
-	buildDuration := util.FormatDuration(buildDurationStart())
-	util.Success("Project images built in %s.", buildDuration)
+		_, logStderrOutput, err := dockerutil.RunSimpleContainer(ddevImages.GetWebImage()+"-"+app.Name+"-built", "log-stderr-"+app.Name+"-"+util.RandString(6), []string{"sh", "-c", "log-stderr.sh --show 2>/dev/null || true"}, []string{}, []string{}, nil, uid, true, false, map[string]string{"com.ddev.site-name": ""}, nil, nil)
+		// If the web image is dirty, try to rebuild it immediately
+		if err == nil && strings.TrimSpace(logStderrOutput) != "" && globalconfig.IsInternetActive() {
+			util.Debug("Executing docker-compose -f %s --progress=%s build web --no-cache", app.DockerComposeFullRenderedYAMLPath(), progress)
+			out, stderr, err = dockerutil.ComposeCmd(&dockerutil.ComposeCmdOpts{
+				ComposeFiles: []string{app.DockerComposeFullRenderedYAMLPath()},
+				Action:       []string{"--progress=" + progress, "build", "web", "--no-cache"},
+				Progress:     true,
+				Timeout:      time.Hour * 1,
+			})
+			if err != nil {
+				return fmt.Errorf("docker-compose build web --no-cache failed: %v, output='%s', stderr='%s'", err, out, stderr)
+			}
+			if globalconfig.DdevVerbose {
+				util.Debug("docker-compose build web --no-cache output:\n%s\n\n", out)
+			}
+		}
+
+		buildDuration := util.FormatDuration(buildDurationStart())
+		util.Success("Project images built in %s.", buildDuration)
+	} else {
+		util.Debug("SkipAutoPull is enabled, skipping image build")
+	}
 
 	util.Debug("Removing dangling images for the project %s", app.GetComposeProjectName())
 	danglingImages, err := dockerutil.FindImagesByLabels(map[string]string{"com.ddev.buildhost": "", "com.docker.compose.project": app.GetComposeProjectName()}, true)
