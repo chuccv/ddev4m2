@@ -44,9 +44,11 @@ fi
 
 RELEASE_BASE_URL="https://github.com/${DDEV_GITHUB_OWNER}/${DDEV_REPO}/releases/download/${VERSION}"
 
-printf "${GREEN}Đang tải ddev...${RESET}\n"
+printf "${GREEN}Đang tải ddev từ binary (KHÔNG build)...${RESET}\n"
+printf "${YELLOW}URL: ${RELEASE_BASE_URL}/ddev${RESET}\n"
 $SUDO curl -fsSL "${RELEASE_BASE_URL}/ddev" -o /usr/local/bin/ddev || {
     printf "${RED}Không thể tải ddev từ release.${RESET}\n"
+    printf "${RED}Vui lòng kiểm tra release: https://github.com/${DDEV_GITHUB_OWNER}/${DDEV_REPO}/releases/tag/${VERSION}${RESET}\n"
     exit 1
 }
 
