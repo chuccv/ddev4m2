@@ -44,20 +44,45 @@ fi
 
 RELEASE_BASE_URL="https://github.com/${DDEV_GITHUB_OWNER}/${DDEV_REPO}/releases/download/${VERSION}"
 
-printf "${GREEN}Đang tải ddev từ binary (KHÔNG build)...${RESET}\n"
+TMPDIR=/tmp
+DDEV_BINARY="${TMPDIR}/ddev"
+DDEV_HOSTNAME_BINARY="${TMPDIR}/ddev-hostname"
+
+printf "${GREEN}Đang tải ddev binary từ GitHub release...${RESET}\n"
+printf "${YELLOW}Version: ${VERSION}${RESET}\n"
 printf "${YELLOW}URL: ${RELEASE_BASE_URL}/ddev${RESET}\n"
-$SUDO curl -fsSL "${RELEASE_BASE_URL}/ddev" -o /usr/local/bin/ddev || {
-    printf "${RED}Không thể tải ddev từ release.${RESET}\n"
+
+if ! curl -fsSL "${RELEASE_BASE_URL}/ddev" -o "${DDEV_BINARY}"; then
+    printf "${RED}❌ Không thể tải ddev binary từ release.${RESET}\n"
     printf "${RED}Vui lòng kiểm tra release: https://github.com/${DDEV_GITHUB_OWNER}/${DDEV_REPO}/releases/tag/${VERSION}${RESET}\n"
+    exit 1
+fi
+
+printf "${GREEN}✅ Đã tải ddev binary thành công${RESET}\n"
+
+printf "${GREEN}Đang tải ddev-hostname binary...${RESET}\n"
+curl -fsSL "${RELEASE_BASE_URL}/ddev-hostname" -o "${DDEV_HOSTNAME_BINARY}" 2>/dev/null || {
+    printf "${YELLOW}⚠️  Không tải được ddev-hostname (không bắt buộc)${RESET}\n"
+}
+
+printf "${GREEN}Đang cài đặt ddev vào /usr/local/bin...${RESET}\n"
+if [ ! -z "${SUDO}" ]; then
+    printf "${YELLOW}Chạy với sudo để cài đặt vào /usr/local/bin${RESET}\n"
+fi
+
+chmod +x "${DDEV_BINARY}"
+${SUDO} mv -f "${DDEV_BINARY}" /usr/local/bin/ddev || {
+    printf "${RED}❌ Không thể cài đặt ddev vào /usr/local/bin${RESET}\n"
     exit 1
 }
 
-$SUDO curl -fsSL "${RELEASE_BASE_URL}/ddev-hostname" -o /usr/local/bin/ddev-hostname 2>/dev/null || true
-
-$SUDO chmod +x /usr/local/bin/ddev
-$SUDO chmod +x /usr/local/bin/ddev-hostname 2>/dev/null || true
+if [ -f "${DDEV_HOSTNAME_BINARY}" ]; then
+    chmod +x "${DDEV_HOSTNAME_BINARY}"
+    ${SUDO} mv -f "${DDEV_HOSTNAME_BINARY}" /usr/local/bin/ddev-hostname 2>/dev/null || true
+fi
 
 hash -r
 
 printf "${GREEN}✅ DDEV đã được cài đặt thành công!${RESET}\n"
+printf "${GREEN}Version: ${VERSION}${RESET}\n"
 printf "${GREEN}Chạy 'ddev version' để kiểm tra${RESET}\n"
