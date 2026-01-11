@@ -78,121 +78,8 @@ var appTypeMatrix map[string]appTypeFuncs
 
 func init() {
 	appTypeMatrix = map[string]appTypeFuncs{
-		nodeps.AppTypeBackdrop: {
-			settingsCreator:            createBackdropSettingsFile,
-			uploadDirs:                 getBackdropUploadDirs,
-			hookDefaultComments:        getBackdropHooks,
-			appTypeSettingsPaths:       setBackdropSiteSettingsPaths,
-			appTypeDetect:              isBackdropApp,
-			postImportDBAction:         backdropPostImportDBAction,
-			postStartAction:            backdropPostStartAction,
-			importFilesAction:          backdropImportFilesAction,
-			defaultWorkingDirMap:       docrootWorkingDir,
-			composerCreateAllowedPaths: getBackdropComposerCreateAllowedPaths,
-		},
-
-		nodeps.AppTypeCakePHP: {
-			appTypeDetect:        isCakephpApp,
-			configOverrideAction: cakephpConfigOverrideAction,
-			postStartAction:      cakephpPostStartAction,
-		},
-
-		nodeps.AppTypeCraftCms: {
-			settingsCreator:      updateCraftCMSDotEnv,
-			importFilesAction:    craftCmsImportFilesAction,
-			appTypeSettingsPaths: setCraftCMSDotFileLocation,
-			appTypeDetect:        isCraftCmsApp,
-			configOverrideAction: craftCmsConfigOverrideAction,
-		},
-
-		nodeps.AppTypeDrupal6: {
-			settingsCreator:            createDrupalSettingsPHP,
-			uploadDirs:                 getDrupalUploadDirs,
-			hookDefaultComments:        getDrupal6Hooks,
-			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
-			appTypeDetect:              isDrupal6App,
-			configOverrideAction:       drupalConfigOverrideAction,
-			postStartAction:            drupal6PostStartAction,
-			importFilesAction:          drupalImportFilesAction,
-			defaultWorkingDirMap:       docrootWorkingDir,
-			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
-		},
-
-		nodeps.AppTypeDrupal7: {
-			settingsCreator:            createDrupalSettingsPHP,
-			uploadDirs:                 getDrupalUploadDirs,
-			hookDefaultComments:        getDrupal7Hooks,
-			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
-			appTypeDetect:              isDrupal7App,
-			configOverrideAction:       drupal7ConfigOverrideAction,
-			postStartAction:            drupal7PostStartAction,
-			importFilesAction:          drupalImportFilesAction,
-			defaultWorkingDirMap:       docrootWorkingDir,
-			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
-		},
-
-		nodeps.AppTypeDrupal8: {
-			settingsCreator:            createDrupalSettingsPHP,
-			uploadDirs:                 getDrupalUploadDirs,
-			hookDefaultComments:        getDrupalHooks,
-			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
-			appTypeDetect:              isDrupal8App,
-			configOverrideAction:       drupalConfigOverrideAction,
-			postStartAction:            drupalPostStartAction,
-			importFilesAction:          drupalImportFilesAction,
-			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
-		},
-
-		nodeps.AppTypeDrupal9: {
-			settingsCreator:            createDrupalSettingsPHP,
-			uploadDirs:                 getDrupalUploadDirs,
-			hookDefaultComments:        getDrupalHooks,
-			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
-			appTypeDetect:              isDrupal9App,
-			configOverrideAction:       drupalConfigOverrideAction,
-			postStartAction:            drupalPostStartAction,
-			importFilesAction:          drupalImportFilesAction,
-			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
-		},
-
-		nodeps.AppTypeDrupal10: {
-			settingsCreator:            createDrupalSettingsPHP,
-			uploadDirs:                 getDrupalUploadDirs,
-			hookDefaultComments:        getDrupalHooks,
-			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
-			appTypeDetect:              isDrupal10App,
-			configOverrideAction:       drupalConfigOverrideAction,
-			postStartAction:            drupalPostStartAction,
-			importFilesAction:          drupalImportFilesAction,
-			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
-		},
-
-		nodeps.AppTypeDrupal11: {
-			settingsCreator:            createDrupalSettingsPHP,
-			uploadDirs:                 getDrupalUploadDirs,
-			hookDefaultComments:        getDrupalHooks,
-			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
-			appTypeDetect:              isDrupal11App,
-			configOverrideAction:       drupalConfigOverrideAction,
-			postStartAction:            drupalPostStartAction,
-			importFilesAction:          drupalImportFilesAction,
-			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
-		},
-
 		nodeps.AppTypeGeneric: {
 			postStartAction: nil,
-		},
-
-		nodeps.AppTypeLaravel: {
-			appTypeDetect:   isLaravelApp,
-			postStartAction: laravelPostStartAction,
-		},
-
-		nodeps.AppTypeSilverstripe: {
-			appTypeDetect:        isSilverstripeApp,
-			postStartAction:      silverstripePostStartAction,
-			configOverrideAction: silverstripeConfigOverrideAction,
-			uploadDirs:           getSilverstripeUploadDirs,
 		},
 
 		nodeps.AppTypeMagento: {
@@ -215,45 +102,7 @@ func init() {
 		nodeps.AppTypePHP: {
 			postStartAction: nil,
 		},
-
-		nodeps.AppTypeShopware6: {
-			appTypeDetect:        isShopware6App,
-			appTypeSettingsPaths: setShopware6SiteSettingsPaths,
-			uploadDirs:           getShopwareUploadDirs,
-			postStartAction:      shopware6PostStartAction,
-			importFilesAction:    shopware6ImportFilesAction,
-		},
-
-		nodeps.AppTypeSymfony: {
-			appTypeDetect:        isSymfonyApp,
-			appTypeSettingsPaths: setSymfonySiteSettingsPaths,
-			postStartAction:      symfonyPostStartAction,
-			hookDefaultComments:  getSymfonyHooks,
-		},
-
-		nodeps.AppTypeTYPO3: {
-			settingsCreator:      createTypo3SettingsFile,
-			uploadDirs:           getTypo3UploadDirs,
-			hookDefaultComments:  getTypo3Hooks,
-			appTypeSettingsPaths: setTypo3SiteSettingsPaths,
-			appTypeDetect:        isTypo3App,
-			importFilesAction:    typo3ImportFilesAction,
-		},
-
-		nodeps.AppTypeWordPress: {
-			settingsCreator:      createWordpressSettingsFile,
-			uploadDirs:           getWordpressUploadDirs,
-			hookDefaultComments:  getWordpressHooks,
-			appTypeSettingsPaths: setWordpressSiteSettingsPaths,
-			appTypeDetect:        isWordpressApp,
-			importFilesAction:    wordpressImportFilesAction,
-		},
 	}
-
-	// Now add "drupal" type as a copy of latest stable, but don't allow it to be detected as a type
-	drupalType := appTypeMatrix[nodeps.AppTypeDrupalLatestStable]
-	drupalType.appTypeDetect = nil
-	appTypeMatrix[nodeps.AppTypeDrupal] = drupalType
 }
 
 // CreateSettingsFile creates the settings file (like settings.php) for the

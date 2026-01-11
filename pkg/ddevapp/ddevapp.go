@@ -1792,8 +1792,6 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 
 		buildDuration := util.FormatDuration(buildDurationStart())
 		util.Success("Project images built in %s.", buildDuration)
-	} else {
-		util.Debug("SkipAutoPull is enabled, skipping image build")
 	}
 
 	util.Debug("Removing dangling images for the project %s", app.GetComposeProjectName())
