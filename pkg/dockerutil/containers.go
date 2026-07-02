@@ -887,7 +887,7 @@ func RemoveContainer(id string) error {
 		return err
 	}
 
-	_, err = apiClient.ContainerRemove(ctx, id, client.ContainerRemoveOptions{Force: true})
+	_, err = apiClient.ContainerRemove(ctx, id, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
 	return err
 }
 
@@ -905,7 +905,7 @@ func RemoveContainersByLabels(labels map[string]string) error {
 		return nil
 	}
 	for _, c := range containers {
-		_, err = apiClient.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{Force: true})
+		_, err = apiClient.ContainerRemove(ctx, c.ID, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
 		if err != nil {
 			return err
 		}
