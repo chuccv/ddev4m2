@@ -40,10 +40,34 @@ base images ship a recent Composer, so this is acceptable. If a project ever
 needs "always latest Composer", that is a customization and would block the
 skip (a future flag could force it).
 
+## Important finding: the web build is never a structural no-op
+
+`WriteBuildDockerfile()` for **web** always receives extra content that injects
+steps regardless of user customization (`config.go:1082-1084`):
+
+```
+RUN log-stderr.sh mariadb-compat-install.sh || true
+RUN log-stderr.sh mariadb-skip-ssl-wrapper-install.sh || true
+```
+
+plus `composer self-update` and permission fixes. So the web `-built` image
+always adds the mariadb-compat wrappers etc. on top of the base. Using the base
+directly for web is therefore only correct when the **base image already bakes
+those in**. This cannot be detected statically, so web requires an explicit
+marker (below). For **db with MariaDB**, by contrast, no extra content is
+injected (`extraDBContent` is Postgres-only), so a clean MariaDB db build is
+just the `useradd` block — a genuine no-op when uid/gid match, with no marker
+needed.
+
 ## Detection Criteria
 
 A new helper decides, **per service (web and db independently)**, whether the
 base image can be used directly. It returns true only when **all** hold:
+
+- **(web only) the base image carries the `com.ddev.prebaked="true"` label.**
+  This is how a prebaked base declares it already includes the mariadb-compat
+  wrappers, composer, and permission setup the web build would otherwise add.
+  Db does not need this marker.
 
 - **No user build files** in `.ddev/web-build` / `.ddev/db-build`:
   no `prepend.Dockerfile*`, `pre.Dockerfile*`, `post.Dockerfile*`, or
@@ -69,27 +93,49 @@ base image can be used directly. It returns true only when **all** hold:
 > they never block the skip — and they keep working because they are separate
 > containers with their own images, untouched by this change.
 
-## Mechanism
+## Mechanism — tag the base as the built image (no build)
 
-1. **`canUseBaseImageDirectly(buildContextDir, baseImage)`** — new function in
-   `pkg/ddevapp/built_image.go` implementing the criteria above.
-2. **`WebBuiltImage()` / `DBBuiltImage()`** — when the corresponding service can
-   use the base directly, return the **base** image
-   (`app.WebImage` / `app.GetDBImage()`) instead of the `-built` tag. Because
-   `DDEV_WEBIMAGE_BUILT` / `DDEV_DBIMAGE_BUILT` (`ddevapp.go:2981,2984`) are
-   derived from these, the compose service `image:` automatically points at the
-   base. **No change to `app_compose_template.yaml`.**
-3. **Build step** (`ddevapp.go:1888-1925`): build only the services that are
-   **not** skipped. Pass an explicit services list to `composeBuild()`. If both
-   web and db are skipped, skip the build block entirely. `docker compose up`
-   does not build images that already exist, and the base images are present
-   via `PullBaseContainerImages()`.
-4. **Image-existence check** (`ddevapp.go:1861-1873`): when a service uses the
-   base directly, "built image exists locally" must check the **base** image,
-   which `WebBuiltImage()`/`DBBuiltImage()` now return — so this keeps working
-   with no special-casing.
-5. **Legacy/`-built` tag cleanup** (`ddevapp.go:1939-1944`) is unchanged.
-   Removing a tag never touches volumes or data.
+The chosen mechanism keeps `WebBuiltImage()`/`DBBuiltImage()` returning the
+content-addressed `-built` tag unchanged, and instead **tags the base image with
+that `-built` tag** when the build can be skipped. This is a zero-disk alias, so
+every downstream consumer (compose `image:`, the existence check, cleanup) works
+with no special-casing.
+
+1. **`webUsesBaseImageDirectly()` / `dbUsesBaseImageDirectly()`** in
+   `pkg/ddevapp/built_image.go`:
+   - `serviceBuildAddsNothing(buildSubdir, extraPackages, isWeb)` — pure,
+     Docker-independent customization check (no user build files, no
+     `extra_packages`, web PHP preinstalled, db not mysql-8.x / not Postgres).
+   - web additionally requires `baseImageIsPrebaked()` (the `com.ddev.prebaked`
+     label).
+   - both require `baseImageMatchesHostUser()` — the base image's user uid/gid
+     (from `docker inspect` `Config.User`, resolving a username via one cached
+     `id` run) equals `GetContainerUser()`.
+   - On any error or uncertainty the helpers return false → normal build.
+2. **Build step** (`ddevapp.go`, inside `if buildNeeded`): for each service that
+   can use the base directly, `dockerutil.TagImage(base, builtTag)` instead of
+   building; build only the remaining services via `composeBuild(services...)`.
+   If both web and db use the base, no build runs at all.
+3. **No change** to `WebBuiltImage()`/`DBBuiltImage()`, the env vars
+   (`DDEV_WEBIMAGE_BUILT`/`DDEV_DBIMAGE_BUILT`), or `app_compose_template.yaml`.
+   `pull_policy: build` is safe because the `-built` tag exists locally (as the
+   alias), so `up` neither pulls nor rebuilds.
+4. **Cleanup** (`ddevapp.go`) is unchanged and safe: removing the `-built` alias
+   tag only untags it; the base keeps its own tag, and volumes/data are never
+   touched.
+5. **New dockerutil helpers**: `ImageConfigUser`, `ImageConfigLabel`, `TagImage`.
+
+## Required action on the base image (web only)
+
+For web skipping to activate, the prebaked web base image must set:
+
+```dockerfile
+LABEL com.ddev.prebaked="true"
+```
+
+It declares the base already includes the mariadb-compat wrappers, composer, and
+permission setup. Without the label, web always builds as before (safe default).
+Db (MariaDB) needs no label.
 
 ## Out of Scope (unchanged)
 
@@ -100,14 +146,18 @@ base image can be used directly. It returns true only when **all** hold:
 
 ## Testing
 
-- **Unit tests** (`pkg/ddevapp/built_image_test.go`):
-  - `canUseBaseImageDirectly` returns false when any single condition fails
-    (a `web-build/Dockerfile`, a non-empty `extra_packages`, a non-preinstalled
-    PHP version, a mismatched `uid`/`gid`).
-  - `canUseBaseImageDirectly` returns true for a clean project with matching
-    `uid`/`gid`.
-  - `WebBuiltImage()`/`DBBuiltImage()` return the base image when skippable and
-    the `-built` content-addressed tag otherwise.
+- **Unit tests** (`pkg/ddevapp/built_image_test.go`, Docker-independent):
+  - `TestServiceBuildAddsNothing` — false when any customization input is
+    present (a `web-build/Dockerfile`, non-empty `extra_packages`, a
+    non-preinstalled PHP version, mysql-8.x / Postgres db); true for a clean
+    web/MariaDB-db project.
+  - `TestHasUserBuildFiles` — only user-provided files count (example files and
+    the managed `README.txt` do not; a subdirectory does).
+  - `TestBaseImageUIDGIDNumeric` / `TestIsAllDigits` — numeric uid/gid parsing.
+  - The Docker-dependent helpers (`baseImageMatchesHostUser`,
+    `baseImageIsPrebaked`) are covered by integration only — the ddevapp test
+    package's `TestMain` requires the full Docker + ddev harness, so these unit
+    tests are run there, not in a standalone container.
 - **Integration** (Docker available): a clean project starts with no
   `*-built` image created and the web/db services running the base image; a
   project with `webimage_extra_packages` still builds a `-built` image and

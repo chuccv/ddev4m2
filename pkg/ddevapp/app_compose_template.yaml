@@ -11,7 +11,10 @@ services:
         username: '{{ .Username }}'
         uid: '{{ .UID }}'
         gid: '{{ .GID }}'
-    image: ${DDEV_DBIMAGE}-${DDEV_SITENAME}-built
+    image: ${DDEV_DBIMAGE_BUILT}
+    # Built image lives only locally (content-addressed tag), never in a registry,
+    # so never attempt to pull it — build it. Avoids a "manifest unknown" pull error.
+    pull_policy: build
     cap_add:
       - SYS_NICE
     stop_grace_period: 60s
@@ -99,7 +102,9 @@ services:
         gid: '{{ .GID }}'
         DDEV_PHP_VERSION: ${DDEV_PHP_VERSION}
         DDEV_DATABASE: ${DDEV_DATABASE}
-    image: ${DDEV_WEBIMAGE}-${DDEV_SITENAME}-built
+    image: ${DDEV_WEBIMAGE_BUILT}
+    # See db service: built image is local-only, build it instead of pulling.
+    pull_policy: build
     command: /pre-start.sh
 
     networks: ["default", "ddev_default"]

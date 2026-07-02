@@ -336,7 +336,7 @@ func (app *DdevApp) Describe(short bool) (map[string]any, error) {
 		services[shortName] = map[string]any{}
 		services[shortName]["status"] = string(c.State.Status)
 		services[shortName]["full_name"] = fullName
-		services[shortName]["image"] = strings.TrimSuffix(c.Config.Image, fmt.Sprintf("-%s-built", app.Name))
+		services[shortName]["image"] = app.stripBuiltSuffix(c.Config.Image)
 		services[shortName]["short_name"] = shortName
 
 		var exposedPrivatePorts []int
@@ -474,7 +474,7 @@ func (app *DdevApp) Describe(short bool) (map[string]any, error) {
 			services[serviceName]["short_name"] = serviceName
 			services[serviceName]["full_name"] = fmt.Sprintf("ddev-%s-%s", app.Name, serviceName)
 			// Strip the -built suffix from image names, just like for running containers
-			services[serviceName]["image"] = strings.TrimSuffix(composeService.Image, fmt.Sprintf("-%s-built", app.Name))
+			services[serviceName]["image"] = app.stripBuiltSuffix(composeService.Image)
 
 			// Extract port information from docker-compose configuration
 			portSet := make(map[int]bool)
@@ -1860,8 +1860,8 @@ func (app *DdevApp) Start() error {
 
 	if !buildNeeded {
 		// Verify the built images still exist locally
-		webBuilt := app.WebImage + "-" + app.Name + "-built"
-		dbBuilt := app.GetDBImage() + "-" + app.Name + "-built"
+		webBuilt := app.EffectiveWebBuiltImage()
+		dbBuilt := app.EffectiveDBBuiltImage()
 		webExists, _ := dockerutil.ImageExistsLocally(webBuilt)
 		dbExists := true
 		if !nodeps.ArrayContainsString(app.GetOmittedContainers(), "db") {
@@ -1886,43 +1886,71 @@ func (app *DdevApp) Start() error {
 	}
 
 	if buildNeeded {
-		if output.JSONOutput {
-			output.UserOut.Printf("Building project images...")
-		} else {
-			fmt.Print("Building project images...")
-			if globalconfig.DdevDebug {
-				output.UserOut.Debugln()
-			}
+		// When the base image is enough (no customization and host uid/gid
+		// already match the base image's user), tag the base as the built image
+		// instead of building. This is a zero-disk alias and skips the build.
+		webUsesBase := app.webUsesBaseImageDirectly()
+		dbOmitted := nodeps.ArrayContainsString(app.GetOmittedContainers(), "db")
+		dbUsesBase := !dbOmitted && app.dbUsesBaseImageDirectly()
+
+		// When the base image is used directly, no tag is created.
+		// DDEV_WEBIMAGE_BUILT / DDEV_DBIMAGE_BUILT already point to the base.
+
+		// Build only the services whose base image is not enough.
+		var servicesToBuild []string
+		if !webUsesBase {
+			servicesToBuild = append(servicesToBuild, "web")
 		}
+		if !dbUsesBase && !dbOmitted {
+			servicesToBuild = append(servicesToBuild, "db")
+		}
+
 		buildDurationStart := util.ElapsedDuration(time.Now())
 
-		_, err = app.composeBuild()
-		if err != nil {
-			return err
-		}
-
-		_, logStderrOutput, logStderrErr := dockerutil.RunSimpleContainer(app.WebImage+"-"+app.Name+"-built", "log-stderr-"+app.Name+"-"+util.RandString(6), []string{"sh", "-c", "log-stderr.sh --show 2>/dev/null || true"}, []string{}, []string{}, nil, uid, true, false, nil, nil, nil)
-		// If the web image is dirty, try to rebuild it immediately
-		if logStderrErr == nil && strings.TrimSpace(logStderrOutput) != "" && globalconfig.IsInternetActive() {
+		if len(servicesToBuild) > 0 {
 			if output.JSONOutput {
-				output.UserOut.Printf("Rebuilding web image without cache...")
+				output.UserOut.Printf("Building project images...")
 			} else {
-				fmt.Print("Rebuilding web image without cache...")
+				fmt.Print("Building project images...")
 				if globalconfig.DdevDebug {
 					output.UserOut.Debugln()
 				}
 			}
-			_, err = app.composeBuild("web", "--no-cache")
+
+			_, err = app.composeBuild(servicesToBuild...)
 			if err != nil {
 				return err
 			}
+
+			if !webUsesBase {
+				_, logStderrOutput, logStderrErr := dockerutil.RunSimpleContainer(app.WebBuiltImage(), "log-stderr-"+app.Name+"-"+util.RandString(6), []string{"sh", "-c", "log-stderr.sh --show 2>/dev/null || true"}, []string{}, []string{}, nil, uid, true, false, nil, nil, nil)
+				// If the web image is dirty, try to rebuild it immediately
+				if logStderrErr == nil && strings.TrimSpace(logStderrOutput) != "" && globalconfig.IsInternetActive() {
+					if output.JSONOutput {
+						output.UserOut.Printf("Rebuilding web image without cache...")
+					} else {
+						fmt.Print("Rebuilding web image without cache...")
+						if globalconfig.DdevDebug {
+							output.UserOut.Debugln()
+						}
+					}
+					_, err = app.composeBuild("web", "--no-cache")
+					if err != nil {
+						return err
+					}
+				}
+			}
 		}
 
-		// Save build hash on successful build
+		// Save build hash on successful build (or tag-only)
 		_ = os.WriteFile(buildHashFile, []byte(currentBuildHash), 0644)
 
 		buildDuration := util.FormatDuration(buildDurationStart())
-		util.Success("Project images built in %s.", buildDuration)
+		if len(servicesToBuild) > 0 {
+			util.Success("Project images built in %s.", buildDuration)
+		} else {
+			util.Debug("Used base images directly for web and db; no build needed.")
+		}
 
 		util.Debug("Removing dangling images for the project %s", app.GetComposeProjectName())
 		danglingImages, dErr := dockerutil.FindImagesByLabels(map[string]string{"com.ddev.buildhost": "", "com.docker.compose.project": app.GetComposeProjectName()}, true)
@@ -1932,6 +1960,10 @@ func (app *DdevApp) Start() error {
 		for _, danglingImage := range danglingImages {
 			_ = dockerutil.RemoveImage(danglingImage.ID)
 		}
+
+		// Remove old built image tags (per-project sitename and content-hash
+		// formats). Removing a tag never touches volumes or data.
+		app.RemoveOldBuiltImageTags()
 	} else {
 		util.Debug("Skipping docker-compose build, build context unchanged and images exist")
 	}
@@ -2382,11 +2414,14 @@ func (app *DdevApp) FindServiceImages(serviceNames []string) ([]string, error) {
 		if image == "" {
 			continue
 		}
-		if before, ok := strings.CutSuffix(image, "-built"); ok {
-			image = before
-			if before, ok := strings.CutSuffix(image, "-"+app.Name); ok {
-				image = before
-			}
+		// Recover the base image name so we pull the base image, never the
+		// locally-built one (built images don't exist in any registry).
+		// Web/db use content-addressed tags; other services (add-ons) still use
+		// the -<sitename>-built scheme, so fall back to stripping that.
+		if stripped := app.stripBuiltSuffix(image); stripped != image {
+			image = stripped
+		} else if before, ok := strings.CutSuffix(image, "-built"); ok {
+			image = strings.TrimSuffix(before, "-"+app.Name)
 		}
 		images = append(images, image)
 	}
@@ -2965,8 +3000,10 @@ func (app *DdevApp) DockerEnv() map[string]string {
 		"DDEV_SITENAME":                  app.Name,
 		"DDEV_TLD":                       app.ProjectTLD,
 		"DDEV_DBIMAGE":                   app.GetDBImage(),
+		"DDEV_DBIMAGE_BUILT":             app.EffectiveDBBuiltImage(),
 		"DDEV_PROJECT":                   app.Name,
 		"DDEV_WEBIMAGE":                  app.WebImage,
+		"DDEV_WEBIMAGE_BUILT":            app.EffectiveWebBuiltImage(),
 		"DDEV_APPROOT":                   app.AppRoot,
 		"DDEV_COMPOSER_ROOT":             app.GetComposerRoot(true, false),
 		"DDEV_DATABASE_FAMILY":           dbFamily,
@@ -3527,11 +3564,12 @@ func deleteImages(app *DdevApp) {
 			util.Success("Image %s for project %s was deleted", imageName, app.Name)
 		}
 	}
-	// These images should already be deleted, but just in case, delete these two by name
-	dbBuilt := app.GetDBImage() + "-" + app.Name + "-built"
-	_ = dockerutil.RemoveImage(dbBuilt)
-	webBuilt := app.WebImage + "-" + app.Name + "-built"
-	_ = dockerutil.RemoveImage(webBuilt)
+	// These images should already be deleted, but just in case, delete them by
+	// name. Remove both the content-addressed tag and the legacy per-project tag.
+	_ = dockerutil.RemoveImage(app.DBBuiltImage())
+	_ = dockerutil.RemoveImage(app.WebBuiltImage())
+	_ = dockerutil.RemoveImage(app.legacyDBBuiltImage())
+	_ = dockerutil.RemoveImage(app.legacyWebBuiltImage())
 }
 
 // RemoveGlobalProjectInfo deletes the project from DdevProjectList

@@ -71,6 +71,71 @@ func ImageID(imageName string) string {
 	return info.ID
 }
 
+// ImageConfigUser returns the USER configured in an image (Config.User),
+// e.g. "ddev", "1000", or "1000:1000". An empty string means the image runs as
+// root and the image has no baked-in user.
+func ImageConfigUser(imageName string) (string, error) {
+	ctx, apiClient, err := GetDockerClient()
+	if err != nil {
+		return "", err
+	}
+	info, err := apiClient.ImageInspect(ctx, imageName)
+	if err != nil {
+		return "", err
+	}
+	if info.Config == nil {
+		return "", nil
+	}
+	return info.Config.User, nil
+}
+
+// ImageConfigLabel returns the value of a label from the image config, or an
+// empty string if the label is absent.
+func ImageConfigLabel(imageName string, key string) (string, error) {
+	ctx, apiClient, err := GetDockerClient()
+	if err != nil {
+		return "", err
+	}
+	info, err := apiClient.ImageInspect(ctx, imageName)
+	if err != nil {
+		return "", err
+	}
+	if info.Config == nil {
+		return "", nil
+	}
+	return info.Config.Labels[key], nil
+}
+
+// TagImage adds an additional tag (target) pointing at the same image as source.
+// This is a zero-disk alias: it creates a new name for an existing image.
+func TagImage(source string, target string) error {
+	ctx, apiClient, err := GetDockerClient()
+	if err != nil {
+		return err
+	}
+	_, err = apiClient.ImageTag(ctx, client.ImageTagOptions{Source: source, Target: target})
+	return err
+}
+
+// FindImagesByReference returns all local images whose tag matches the given
+// reference filter (Docker filter syntax, e.g. "ddev/ddev-webserver:*-built").
+func FindImagesByReference(ref string) ([]image.Summary, error) {
+	filterList := client.Filters{}
+	filterList.Add("reference", ref)
+	ctx, apiClient, err := GetDockerClient()
+	if err != nil {
+		return nil, err
+	}
+	images, err := apiClient.ImageList(ctx, client.ImageListOptions{
+		All:     false,
+		Filters: filterList,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return images.Items, nil
+}
+
 // RemoveImage removes an image with force
 func RemoveImage(tag string) error {
 	ctx, apiClient, err := GetDockerClient()

@@ -11,6 +11,22 @@ For developer documentation, see:
 - [Developer Documentation](https://docs.ddev.com/en/stable/developers/)
 - [Building and Contributing](docs/content/developers/building-contributing.md)
 
+## This Fork
+
+This repo (`chuccv/ddev4m2`) is a fork of upstream `ddev/ddev`. The reason for the fork:
+upstream DDEV builds a **per-project derived image** for every project — `${DDEV_WEBIMAGE}-${DDEV_SITENAME}-built`
+(and the matching `-db-built`) — and these images are **not shared across projects**, so disk usage
+grows with the number of projects even when the customizations are identical. The goal of this fork is
+to avoid that duplication when it isn't needed.
+
+Key code for the per-project image build (start here when working on the image-dedup customization):
+
+- `pkg/ddevapp/config.go` — `WriteBuildDockerfile()` generates `.ddev/.webimageBuild/Dockerfile` and `.ddev/.dbimageBuild/Dockerfile`
+- `pkg/ddevapp/ddevapp.go` — `composeBuild()` runs the build; `buildContextFingerprint()` + `.ddev/.build-hash` decide when to rebuild vs reuse a local image
+- `pkg/ddevapp/app_compose_template.yaml` — defines the `-${DDEV_SITENAME}-built` image tags and `./.webimageBuild` / `./.dbimageBuild` build contexts
+- `pkg/docker/images.go` — `GetWebImage()` / `GetDBImage()` return the **base** images that the per-project images are built on top of
+- `pkg/ddevapp/ddevapp.go` — `PullBaseContainerImages()` pulls the shared base images before the per-project build
+
 ## Key Development Commands
 
 ### Building
@@ -58,15 +74,18 @@ markdownlint --fix $FILE                      # Fix markdown formatting
 
 **Main Binaries** (`cmd/`):
 
-- `cmd/ddev/` - Main CLI application using Cobra framework
+- `cmd/ddev/` - Main CLI application using Cobra framework. Individual subcommands live in `cmd/ddev/cmd/` — add new commands there.
 - `cmd/ddev-hostname/` - Hostname management utility
 
 **Core Packages** (`pkg/`):
 
 - `pkg/ddevapp/` - Core application logic, project management, Docker orchestration. The `DdevApp` struct represents a DDEV project configuration.
 - `pkg/dockerutil/` - Docker client utilities and Docker Compose management
+- `pkg/docker/` - Embedded base-image accessors (`GetWebImage()`/`GetDBImage()`) and packaged Docker assets
+- `pkg/config/` - Reading, writing, and migrating per-project `.ddev/config.yaml`
 - `pkg/globalconfig/` - Global DDEV configuration (`~/.ddev/global_config.yaml`)
 - `pkg/versionconstants/` - Version info and Docker image tags. **Edit this when testing custom container images.**
+- `pkg/output/`, `pkg/tui/`, `pkg/styles/` - CLI output, terminal UI, and styling
 - `pkg/fileutil/`, `pkg/netutil/`, `pkg/util/` - Utility packages
 
 **Container Definitions** (`containers/`):
